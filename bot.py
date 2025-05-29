@@ -106,7 +106,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 # Função principal
 async def main():
-    TOKEN = os.getenv("7738868845:AAEy6OmpYdZ_a-pPmtDBV6RAZ1hFaw5e5tw")  # Corrigido: usar variável de ambiente
+    TOKEN = os.getenv("BOT_TOKEN")  # Corrigido: usar variável de ambiente
     app = ApplicationBuilder().token(TOKEN).build()
 
     conv_handler = ConversationHandler(
