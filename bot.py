@@ -1,6 +1,8 @@
+import os
+import json
 import asyncio
 import nest_asyncio
-from telegram import Update
+from telegram import Update, ReplyKeyboardRemove
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler,
     ContextTypes, ConversationHandler, filters
@@ -9,132 +11,126 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
 # Etapas da conversa
-avaria, atividade, obra, horas, trabalho, localização, apoio , material = range(8)
+avaria, atividade, obra, horas, trabalho, localizacao, apoio, material = range(8)
 
-# Autenticação com Google Sheets
+# ✅ Autenticação com Google Sheets (usando variável de ambiente)
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
+google_creds = json.loads(os.getenv("GOOGLE_CREDENTIALS"))  # variável de ambiente criada na Render
+creds = ServiceAccountCredentials.from_json_keyfile_dict(google_creds, scope)
 client = gspread.authorize(creds)
 sheet = client.open("bot telegram").sheet1
 
 # Início da conversa
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("ok! responda as perguntas abaixo .\n\n  Descreva a avaria :")
+    context.user_data.clear()
+    await update.message.reply_text("✅ok! responda as perguntas abaixo.\n\nDescrição da avaria:")
     return avaria
 
 async def get_avaria(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["avaria"] = update.message.text
-    
-    await update.message.reply_text(" Descreva a atividade :")
+    await update.message.reply_text("Descrição da Tarefa:")
     return atividade
 
 async def get_atividade(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["atividade"] = update.message.text
-
-    await update.message.reply_text("Mão de obra: ")
+    await update.message.reply_text("Previsão da Mão de obra:")
     return obra
 
 async def get_obra(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["obra"] = update.message.text
-
-    await update.message.reply_text("Quantas horas de trabalho: ")
+    await update.message.reply_text("Previsão horas de trabalho:")
     return horas
 
 async def get_horas(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["horas"] = update.message.text
-
-    await update.message.reply_text("Trabalho em :\nlocal seguro\nTrabalho em altura\nTrabalho em ar quente\nEspaço confinado")
+    await update.message.reply_text(
+        "Trabalho em:\n- local seguro\n- trabalho em altura\n- trabalho em ar quente\n- espaço confinado"
+    )
     return trabalho
 
 async def get_trabalho(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["trabalho"] = update.message.text
+    await update.message.reply_text("Localização do trabalho:")
+    return localizacao
 
-    await update.message.reply_text("localização do trabalho")
-    return localização
-
-async def get_localização(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data["localização"] = update.message.text
-
-    await update.message.reply_text("Necessario apoio ? \nex:soldado,caldereiro... ")
+async def get_localizacao(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    context.user_data["localizacao"] = update.message.text
+    await update.message.reply_text("Necessário apoio? (ex: soldador, caldeireiro...)")
     return apoio
 
 async def get_apoio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["apoio"] = update.message.text
-    
-    await update.message.reply_text("Nessario material ? Se sim qual e o NI ? ")
+    await update.message.reply_text("Necessário material? Se sim, qual e o NI?")
     return material
 
 async def get_material(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data["material"] = update.message.text 
+    context.user_data["material"] = update.message.text
 
+    # Salvar na planilha
+    try:
+        sheet.append_row([
+            context.user_data["avaria"],
+            context.user_data["atividade"],
+            context.user_data["obra"],
+            context.user_data["horas"],
+            context.user_data["trabalho"],
+            context.user_data["localizacao"],
+            context.user_data["apoio"],
+            context.user_data["material"],
+        ])
+    except Exception as e:
+        await update.message.reply_text(f"❌ Erro ao salvar os dados: {e}")
+        return ConversationHandler.END
 
-    # Salvar dados na planilha
-    sheet.append_row([
-        context.user_data["avaria"],
-        context.user_data["atividade"],
-        context.user_data["obra"],
-        context.user_data["horas"],
-        context.user_data["trabalho"],
-        context.user_data["localização"],
-        context.user_data["apoio"],
-        context.user_data["material"],
-    ])
-
-    # Enviar resumo
     resumo = (
         f"✅ NOTA SALVA!\n\n"
-        f" Avaria: {context.user_data['avaria']}\n\n"
-        f" Ativiade: {context.user_data['atividade']}\n\n"
-        f" Mão de obra: {context.user_data['obra']}\n\n"
-        f" Horas: {context.user_data['horas']}\n\n"
-        f" Trabalho: {context.user_data['trabalho']}\n\n"
-        f" Localização: {context.user_data['localização']}\n\n"
-        f" Apoio: {context.user_data['apoio']}\n\n"
-        f" Material: {context.user_data['material']}\n"
-        
+        f"Avaria: {context.user_data['avaria']}\n\n"
+        f"Atividade: {context.user_data['atividade']}\n\n"
+        f"Mão de obra: {context.user_data['obra']}\n\n"
+        f"Horas: {context.user_data['horas']}\n\n"
+        f"Trabalho: {context.user_data['trabalho']}\n\n"
+        f"Localização: {context.user_data['localizacao']}\n\n"
+        f"Apoio: {context.user_data['apoio']}\n\n"
+        f"Material: {context.user_data['material']}"
     )
-    await update.message.reply_text(resumo)
-    return ConversationHandler.END
 
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("❌ Nota cancelada.")
-    return ConversationHandler.END
-
-async def repetir(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("❌ Nota cancelada. Vamos começar de novo.\n\nDescreva a avaria:")
+    await update.message.reply_text(resumo, reply_markup=ReplyKeyboardRemove())
     context.user_data.clear()
-    return avaria
+    return ConversationHandler.END
 
+# Cancelamento
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text("❌ Conversa cancelada.\nSe quiser começar de novo, digite 'iniciar nota'.")
+    context.user_data.clear()
+    return ConversationHandler.END
 
 # Função principal
 async def main():
-    app = ApplicationBuilder().token("7738868845:AAEy6OmpYdZ_a-pPmtDBV6RAZ1hFaw5e5tw").build()
+    TOKEN = os.getenv("7738868845:AAEy6OmpYdZ_a-pPmtDBV6RAZ1hFaw5e5tw")  # Corrigido: usar variável de ambiente
+    app = ApplicationBuilder().token(TOKEN).build()
 
     conv_handler = ConversationHandler(
-    entry_points=[MessageHandler(filters.TEXT & filters.Regex("^abrir nota$"), start)],
-    states={
-        avaria: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_avaria)],
-        atividade: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_atividade)],
-        obra: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_obra)],
-        horas: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_horas)],
-        trabalho: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_trabalho)],
-        localização: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_localização)],
-        apoio: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_apoio)],
-        material: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_material)],
-    },
-    fallbacks=[
-        CommandHandler("cancel", cancel),
-        MessageHandler(filters.TEXT & filters.Regex("^cancelar$"), cancel),
-        CommandHandler("repetir", repetir),
-        MessageHandler(filters.TEXT & filters.Regex("^repetir$"), repetir),
-    ],
-)
+        entry_points=[MessageHandler(filters.TEXT & filters.Regex("(?i)^abrir nota$"), start)],
+        states={
+            avaria: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_avaria)],
+            atividade: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_atividade)],
+            obra: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_obra)],
+            horas: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_horas)],
+            trabalho: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_trabalho)],
+            localizacao: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_localizacao)],
+            apoio: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_apoio)],
+            material: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_material)],
+        },
+        fallbacks=[
+            CommandHandler("cancel", cancel),
+            MessageHandler(filters.TEXT & filters.Regex("(?i)^cancelar$"), cancel),
+        ],
+    )
 
     app.add_handler(conv_handler)
     print("🤖 Bot rodando...")
     await app.run_polling()
 
-# Executar com suporte para ambientes que já usam asyncio
 if __name__ == "__main__":
     nest_asyncio.apply()
     asyncio.get_event_loop().run_until_complete(main())
